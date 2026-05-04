@@ -201,7 +201,7 @@ export default function App() {
               Query <span className="beta-badge">BETA</span>
             </div>
             <div className="top-nav-item disabled" style={{ fontSize: 13, opacity: 0.5 }}>
-              다양한 리소스 최적화 솔루션 출시 예정
+              다양한 솔루션 출시 예정
             </div>
           </nav>
         </div>
@@ -223,7 +223,7 @@ export default function App() {
                   style={{ marginBottom: 12, background: activeTab === 'welcome' ? 'var(--accent-primary)' : 'var(--bg-card-hover)' }}
                 >
                   <Layers size={18} />
-                  <span style={{ fontSize: 13, fontWeight: 700 }}>대시보드 소개</span>
+                  <span style={{ fontSize: 13, fontWeight: 700 }}>Query 솔루션 소개</span>
                 </div>
 
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', marginTop: 8, marginBottom: 8, paddingLeft: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>

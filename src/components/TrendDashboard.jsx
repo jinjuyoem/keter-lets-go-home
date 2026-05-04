@@ -6,10 +6,12 @@ import {
 import { 
   Calendar, Download, Info, TrendingUp, TrendingDown, Minus, 
   ChevronRight, ExternalLink, RefreshCw, Edit3, Trash2, Check, Plus,
-  Activity
+  Activity, FileText
 } from 'lucide-react';
 import { format, subDays, subWeeks, subMonths, subYears, isBefore, isAfter, startOfWeek, startOfMonth, addDays, isValid, startOfDay, endOfDay, differenceInDays } from 'date-fns';
 import axios from 'axios';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import { fetchKeywordAdVolumes } from '../api/searchAd';
 
 export default function TrendDashboard({ 
@@ -23,6 +25,7 @@ export default function TrendDashboard({
   showSummaryCards = false,
   groupLabel = '브랜드명'
 }) {
+  const dashboardRef = React.useRef(null);
   const [activeGroups, setActiveGroups] = useState(() => {
     if (storageKey) {
       const saved = localStorage.getItem(storageKey);
@@ -640,8 +643,34 @@ export default function TrendDashboard({
     }, 200);
   };
 
+  const handlePdfDownload = async () => {
+    if (!dashboardRef.current) return;
+    setLoading(true);
+    try {
+      const canvas = await html2canvas(dashboardRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#f8fafc',
+        logging: false
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Keter_Dashboard_${format(new Date(), 'yyyyMMdd_HHmm')}.pdf`);
+    } catch (error) {
+      console.error('PDF generation failed:', error);
+      alert('PDF 생성 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="dashboard-view">
+    <div className="dashboard-view" ref={dashboardRef}>
       {/* Loading Overlay */}
       {loading && (
         <div style={{
@@ -683,6 +712,36 @@ export default function TrendDashboard({
             )}
           </div>
         </div>
+
+        {/* 최상단 PDF Download 버튼 */}
+        <button 
+          onClick={handlePdfDownload}
+          disabled={loading || !chartData || chartData.length === 0}
+          style={{
+            position: 'absolute', top: 0, right: 0,
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '8px 18px', borderRadius: 10,
+            background: 'var(--bg-card)',
+            color: 'var(--accent-secondary)',
+            border: '1px solid var(--border-color)',
+            fontSize: 12, fontWeight: 700,
+            cursor: 'pointer', transition: 'all 0.2s',
+            opacity: (loading || !chartData || chartData.length === 0) ? 0.3 : 1,
+            pointerEvents: (loading || !chartData || chartData.length === 0) ? 'none' : 'auto',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+          }}
+          onMouseOver={e => {
+            e.currentTarget.style.background = 'var(--bg-card-hover)';
+            e.currentTarget.style.borderColor = 'var(--accent-secondary)';
+          }}
+          onMouseOut={e => {
+            e.currentTarget.style.background = 'var(--bg-card)';
+            e.currentTarget.style.borderColor = 'var(--border-color)';
+          }}
+        >
+          <FileText size={15} />
+          PDF Download
+        </button>
         
         <div className="header-controls" style={{ display: 'flex', gap: 32, alignItems: 'flex-start', width: '100%', flexWrap: 'wrap', padding: '12px 0', borderTop: '1px solid var(--border-color)', paddingTop: 24 }}>
           {/* Time Filter & Week Start */}
@@ -1077,6 +1136,9 @@ export default function TrendDashboard({
                 구글 트렌드 함께 보기
               </button>
 
+              {/* 기존 PDF 버튼 삭제 (상단으로 이동됨) */}
+
+
               {/* 데이터 다운 버튼 (맨 우측 끝 배치) */}
               <button 
                 onClick={handleDownload}
@@ -1091,7 +1153,7 @@ export default function TrendDashboard({
                   cursor: 'pointer', transition: 'all 0.2s',
                   opacity: (loading || !chartData || chartData.length === 0) ? 0.3 : 1,
                   pointerEvents: (loading || !chartData || chartData.length === 0) ? 'none' : 'auto',
-                  marginLeft: 'auto'
+                  marginLeft: 8
                 }}
               >
                 <Download size={14} />
@@ -1108,10 +1170,10 @@ export default function TrendDashboard({
               <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--text-secondary)', fontSize: 12, fontWeight: 500 }} tickFormatter={(val) => val >= 1000 ? (val/1000).toFixed(0) + 'k' : val} />
               <Tooltip content={<CustomTooltip />} />
               {activeGroups.map((g, idx) => g && selectedBrands[g.id] && (
-                <Line key={g.id} type="monotone" dataKey={g.id} stroke={getGroupColor(g, idx)} strokeWidth={g.id === baseGroupId ? 5 : 1.5} dot={false} activeDot={{ r: g.id === baseGroupId ? 7 : 4, fill: getGroupColor(g, idx) }} opacity={g.id === baseGroupId ? 1 : 0.7} animationDuration={1200} />
+                <Line key={g.id} type="monotone" dataKey={g.id} stroke={getGroupColor(g, idx)} strokeWidth={g.id === baseGroupId ? 3.5 : 1.5} dot={false} activeDot={{ r: g.id === baseGroupId ? 7 : 4, fill: getGroupColor(g, idx) }} opacity={g.id === baseGroupId ? 1 : 0.7} animationDuration={1200} />
               ))}
               {compareMode !== 'none' && activeGroups.map((g, idx) => g && selectedBrands[g.id] && (
-                <Line key={`${g.id}_compare`} type="monotone" dataKey={`${g.id}_compare`} stroke={getGroupColor(g, idx)} strokeWidth={g.id === baseGroupId ? 3.5 : 1} strokeDasharray="5 4" dot={false} activeDot={{ r: g.id === baseGroupId ? 5 : 3, fill: getGroupColor(g, idx) }} opacity={g.id === baseGroupId ? 0.6 : 0.4} animationDuration={1200} legendType="none" />
+                <Line key={`${g.id}_compare`} type="monotone" dataKey={`${g.id}_compare`} stroke={getGroupColor(g, idx)} strokeWidth={g.id === baseGroupId ? 2 : 1} strokeDasharray="5 4" dot={false} activeDot={{ r: g.id === baseGroupId ? 5 : 3, fill: getGroupColor(g, idx) }} opacity={g.id === baseGroupId ? 0.6 : 0.4} animationDuration={1200} legendType="none" />
               ))}
             </LineChart>
           </ResponsiveContainer>
