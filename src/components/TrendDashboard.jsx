@@ -6,7 +6,7 @@ import {
 import { 
   Calendar, Download, Info, TrendingUp, TrendingDown, Minus, 
   ChevronRight, ExternalLink, RefreshCw, Edit3, Trash2, Check, Plus,
-  Activity, FileText
+  Activity, FileText, Zap, Home
 } from 'lucide-react';
 import { format, subDays, subWeeks, subMonths, subYears, isBefore, isAfter, startOfWeek, startOfMonth, addDays, isValid, startOfDay, endOfDay, differenceInDays } from 'date-fns';
 import axios from 'axios';
@@ -40,6 +40,7 @@ export default function TrendDashboard({
   const [rawData, setRawData] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [isPdfGenerating, setIsPdfGenerating] = useState(false);
   const [timeUnit, setTimeUnit] = useState('date');
   const [weekStartsOn, setWeekStartsOn] = useState(0); // 0: Sun, 1: Mon
   const [compareMode, setCompareMode] = useState('none');
@@ -644,28 +645,44 @@ export default function TrendDashboard({
   };
 
   const handlePdfDownload = async () => {
-    if (!dashboardRef.current) return;
-    setLoading(true);
+    if (!dashboardRef.current || isPdfGenerating) return;
+    
+    setIsPdfGenerating(true); // 로딩 오버레이 없이 버튼만 비활성화
+    window.scrollTo(0, 0);
+    
     try {
+      // 푸터 보이기 (로딩 오버레이 없이)
+      const footer = document.getElementById('pdf-footer');
+      if (footer) footer.style.display = 'flex';
+
+      // 렌더링 안정화 대기
+      await new Promise(resolve => setTimeout(resolve, 300));
+
       const canvas = await html2canvas(dashboardRef.current, {
         scale: 2,
         useCORS: true,
         backgroundColor: '#f8fafc',
-        logging: false
+        logging: false,
+        allowTaint: true,
+        scrollX: 0,
+        scrollY: 0,
+        ignoreElements: (el) => el.hasAttribute('data-html2canvas-ignore')
       });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-      
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+
+      if (footer) footer.style.display = 'none';
+
+      const imgData = canvas.toDataURL('image/png', 1.0);
+      const imgWidth = 210;
+      const pageHeight = (canvas.height * imgWidth) / canvas.width;
+      const pdf = new jsPDF('p', 'mm', [imgWidth, pageHeight]);
+      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, pageHeight, undefined, 'SLOW');
       pdf.save(`Keter_Dashboard_${format(new Date(), 'yyyyMMdd_HHmm')}.pdf`);
+      
     } catch (error) {
       console.error('PDF generation failed:', error);
       alert('PDF 생성 중 오류가 발생했습니다.');
     } finally {
-      setLoading(false);
+      setIsPdfGenerating(false);
     }
   };
 
@@ -673,12 +690,14 @@ export default function TrendDashboard({
     <div className="dashboard-view" ref={dashboardRef}>
       {/* Loading Overlay */}
       {loading && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-          background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(10px)',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          zIndex: 10000, animation: 'fadeIn 0.3s ease-out'
-        }}>
+        <div 
+          data-html2canvas-ignore="true"
+          style={{
+            position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+            background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(10px)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            zIndex: 10000, animation: 'fadeIn 0.3s ease-out'
+          }}>
           <div style={{ 
             width: 60, height: 60, border: '5px solid var(--border-color)', 
             borderTop: '5px solid var(--accent-primary)', borderRadius: '50%',
@@ -716,7 +735,7 @@ export default function TrendDashboard({
         {/* 최상단 PDF Download 버튼 */}
         <button 
           onClick={handlePdfDownload}
-          disabled={loading || !chartData || chartData.length === 0}
+          disabled={isPdfGenerating || !chartData || chartData.length === 0}
           style={{
             position: 'absolute', top: 0, right: 0,
             display: 'flex', alignItems: 'center', gap: 8,
@@ -725,9 +744,9 @@ export default function TrendDashboard({
             color: 'var(--accent-secondary)',
             border: '1px solid var(--border-color)',
             fontSize: 12, fontWeight: 700,
-            cursor: 'pointer', transition: 'all 0.2s',
-            opacity: (loading || !chartData || chartData.length === 0) ? 0.3 : 1,
-            pointerEvents: (loading || !chartData || chartData.length === 0) ? 'none' : 'auto',
+            cursor: isPdfGenerating ? 'wait' : 'pointer', transition: 'all 0.2s',
+            opacity: (isPdfGenerating || !chartData || chartData.length === 0) ? 0.5 : 1,
+            pointerEvents: (isPdfGenerating || !chartData || chartData.length === 0) ? 'none' : 'auto',
             boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
           }}
           onMouseOver={e => {
@@ -740,7 +759,7 @@ export default function TrendDashboard({
           }}
         >
           <FileText size={15} />
-          PDF Download
+          {isPdfGenerating ? '생성 중...' : 'PDF Download'}
         </button>
         
         <div className="header-controls" style={{ display: 'flex', gap: 32, alignItems: 'flex-start', width: '100%', flexWrap: 'wrap', padding: '12px 0', borderTop: '1px solid var(--border-color)', paddingTop: 24 }}>
@@ -1181,6 +1200,29 @@ export default function TrendDashboard({
       </div>
 
       {/* 인구통계 분석 섹션 제거됨 */}
+      {/* PDF 전용 하단 푸터 (평소엔 숨김) */}
+      <div id="pdf-footer" style={{
+        display: 'none',
+        marginTop: 60,
+        padding: '40px 0',
+        borderTop: '1px solid var(--border-color)',
+        textAlign: 'center',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 16,
+        width: '100%'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+          <div style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(15, 23, 42, 0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(15, 23, 42, 0.08)' }}>
+            <Home size={18} color="var(--text-primary)" strokeWidth={1.5} />
+          </div>
+          <span style={{ fontSize: 20, fontWeight: 300, letterSpacing: '0.05em', color: 'var(--text-primary)', textTransform: 'uppercase' }}>Keter, Let's Go Home</span>
+        </div>
+        <p style={{ margin: 0, fontSize: 11, color: 'var(--text-secondary)', fontWeight: 400, opacity: 0.6, letterSpacing: '0.02em' }}>
+          © 2026 Keter, Let's Go Home. All rights reserved.
+        </p>
+      </div>
+
     </div>
   );
 }
